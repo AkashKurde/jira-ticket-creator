@@ -1,6 +1,6 @@
 # Jira Issue Creator
 
-A small React (Vite) app to create Jira issues from the browser. Credentials are stored in `localStorage`. Jira REST calls use **axios**; there is no backend in this repo.
+A React (Vite) app with a small **Express** backend. The browser calls **`/api`** on your server; the server calls **Jira** (avoids **CORS** from the browser). Credentials stay in `localStorage` on the client and are sent to your backend only when creating an issue.
 
 ## Prerequisites
 
@@ -14,39 +14,57 @@ npm install
 npm run dev
 ```
 
-Open the URL shown in the terminal (usually `http://localhost:5173`).
+This runs **Express** and **Vite** together (ports from **`src/config/constants.js`**, default API `3001`, Vite `5173`). Open the Vite URL in the browser.
 
 ```bash
-npm run build    # production bundle in dist/
-npm run preview  # serve dist/ locally
+npm run dev:client   # Vite only (use if API is already running)
+npm run dev:server   # API + static dist/ (build first for a real UI)
+npm run build        # production frontend bundle → dist/
+npm run preview      # Vite’s preview of dist/ (no Express)
+npm start            # production: Express serves dist/ + /api on API_PORT (see below)
 ```
+
+### Production (single Node process)
+
+1. Set **`src/config/constants.js`** (Jira URL, `API_PORT`, keep **`API_BASE_URL = ""`** when the UI is served from the same host as Express).
+2. **`npm ci`** and **`npm run build`** (creates **`dist/`**).
+3. **`npm start`** — Express listens on **`http://localhost:<API_PORT>`** (default **3001**), serves **`/api/*`**, and static files from **`dist/`** (plus **`index.html`** for SPA routes).
+
+Put **HTTPS** in front (reverse proxy, load balancer, or tunnel) for real deployments.
 
 ## Configuration
 
-Edit **`src/config/constants.js`**:
+### Jira (server-side)
+
+Edit **`src/config/constants.js`** — the Express server imports these when calling Jira:
 
 | Constant | Purpose |
 |----------|---------|
-| `JIRA_BASE_URL` | Root URL of your Jira instance (no trailing slash), e.g. `https://yourcompany.atlassian.net` |
+| `JIRA_BASE_URL` | Root URL of your Jira instance (no trailing slash) |
 | `PROJECT_KEY` | Project key for new issues |
 | `ISSUE_TYPE_NAME` | Issue type **name** as in Jira (e.g. `Story`) |
-
-The dev server proxies **`/jira` → `JIRA_BASE_URL`** (see `vite.config.js`) so the browser talks to the same origin during `npm run dev`, which avoids many **CORS** problems. In a **production build**, the client calls `JIRA_BASE_URL` directly; Jira may block cross-origin requests unless you use a reverse proxy or backend.
+| `API_PORT` | Port for Express; Vite’s dev proxy targets this port |
+| `API_BASE_URL` | Backend origin (no trailing slash). Use `""` for relative **`/api`** (dev proxy or same-origin deploy). Set to e.g. `https://api.example.com` if the SPA and API are on different origins |
 
 ## Credentials
 
 On first load, a modal asks for:
 
 - **Username** — Jira Cloud: usually your **email**
-- **PAT / API token** — your Jira **API token** (or PAT on Data Center)
+- **PAT / API token** — your Jira **API token**
 
-Values are saved under these `localStorage` keys: **`userName`**, **`PAT`**.
+Values are stored in `localStorage` as **`userName`** and **`PAT`**. They are sent in the JSON body to **`POST /api/jira/issue`** when you submit the form (not stored on the server).
 
-You can **update** or **clear** credentials from the header. Clearing asks for confirmation when credentials were saved.
+## Backend API
 
-## API payload
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Liveness check |
+| POST | `/api/jira/issue` | Body: `{ userName, pat, title, description, dueDate }` — proxies to Jira `POST /rest/api/3/issue` |
 
-Create issue uses `POST /rest/api/3/issue` with a body like:
+## Jira payload (server → Jira)
+
+Same shape as before (plain string `description`, plus `duedate`):
 
 ```json
 {
@@ -60,33 +78,25 @@ Create issue uses `POST /rest/api/3/issue` with a body like:
 }
 ```
 
-If your Jira version expects **Atlassian Document Format** for `description`, adjust `src/api/jira.js` accordingly.
+Watchers in the UI are **demo checkboxes** only.
 
-Watchers in the UI are **demo checkboxes** only. Adding real watchers requires a separate call (e.g. `POST /rest/api/3/issue/{issueIdOrKey}/watchers`) with Atlassian **account IDs**.
+## Security notes
 
-## CORS and security
-
-- **CORS:** Direct browser calls to Jira often fail outside the Vite dev proxy. For production, plan a **proxy** or **backend** that holds secrets and calls Jira server-side.
-- **Tokens in the browser:** Storing API tokens in `localStorage` is convenient but **not** ideal for production (XSS risk). Prefer a server-side integration for real deployments.
+- Tokens still pass through the browser to **your** API; protect **HTTPS** and consider moving auth to **server-side sessions** for production.
+- **`localStorage`** is visible to page scripts (XSS risk); harden the frontend if you expose this app widely.
 
 ## Project layout
 
 ```
+server/
+  index.js              # Express: /api/* + static dist/ + SPA fallback
 src/
-  App.jsx                 # Shell, credential gate, header actions
-  main.jsx
-  index.css
-  api/jira.js             # Axios + create issue
-  config/constants.js     # Jira URL, project, issue type, dummy watchers
-  components/
-    CredentialModal.jsx
-    JiraIssueForm.jsx
-  utils/storage.js        # localStorage helpers
+  api/jira.js           # Axios → backend /api/jira/issue
+  config/constants.js   # Jira URL, project, API port, API base URL
+  ...
 ```
 
 ## Stack
 
-- React 18 (hooks, functional components)
-- Vite 5
-- Tailwind CSS 3
-- Axios
+- React 18, Vite 5, Tailwind CSS 3, Axios
+- Node.js, Express, cors

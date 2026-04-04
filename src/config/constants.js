@@ -1,9 +1,18 @@
 /**
- * Jira connection defaults — edit here for your site/project.
+ * Jira connection defaults — used by the Express backend (`server/index.js`) when calling Jira.
  * Base URL: root of your Jira instance (no trailing slash).
- * `npm run dev` uses the Vite proxy (`/jira` → this URL); production uses this URL in the client.
  */
 export const JIRA_BASE_URL = "https://your-domain.atlassian.net";
+
+/** Express listen port (must match Vite dev proxy in `vite.config.js`). */
+export const API_PORT = 3001;
+
+/**
+ * Backend API base URL (no trailing slash).
+ * Use "" for relative `/api` (dev with Vite proxy, or same-origin reverse proxy in production).
+ * Set to a full origin if the SPA is hosted on a different domain than the API.
+ */
+export const API_BASE_URL = "";
 
 /** Project where new issues will be created */
 export const PROJECT_KEY = "PROJ";
